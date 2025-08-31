@@ -2,6 +2,7 @@
 
 > This project teaches how to build and deploy an application on an EC2 instance manually and using Ansible.
 > The application is a simple website hosted on EC2 which holds employee details.
+<img width="1055" height="419" alt="Screenshot 2025-08-31 at 2 14 56 PM" src="https://github.com/user-attachments/assets/691b8323-102e-4c05-bf6f-0a6f84638f5d" />
 
 ---
 

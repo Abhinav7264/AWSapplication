@@ -11,7 +11,7 @@
 This architecture is implemented in **3 parts**:
 
 ### Part 01 – Prerequisites and Preparation with Terraform
-
+* clone my previous project for all the files - https://github.com/Abhinav7264/Awsinfrasetup.git
 * Adjust infrastructure provisioning files using **Terraform**.
 * Create **Roles**, **Security Groups**, and other essential resources.
 * Ensure all components are prepared for deployment.

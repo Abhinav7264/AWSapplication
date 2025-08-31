@@ -1,6 +1,7 @@
-# HumanGov Infrastructure Project
+# Automated deployment of Applications using Terraform and Ansible
 
-> Hands-on project to implement HumanGov infrastructure using Terraform and Ansible.
+> This project aims on teaching you how to build application on a EC2 instance manually and in automated way using Ansible playbook.
+> The application is a simple website hosted on EC2 instance which holds employee details of the company.
 
 ---
 
@@ -29,22 +30,8 @@ This architecture is implemented in **3 parts**:
 
 ## Part 01 – Prerequisites and Preparation with Terraform
 
-### Prerequisites (Cloud9)
-
-1. Create an IAM user with **Admin permissions**.
-2. Disable **Cloud9 temporary credentials**:
-
-   * Settings > AWS Settings > Credentials > Turn off "AWS managed temporary credentials".
-3. Configure credentials for the new IAM user:
-
-```bash
-aws configure
-```
-
----
-
-### Step 01 – Validate Current Terraform Code
-
+### Step 01 – Validate Current Terraform Code - optional
+Optional : terraform code contains main.tf which builds just ec2 instances.
 ```bash
 cd human-gov-infrastructure/terraform
 terraform plan         # Plan: resources to add

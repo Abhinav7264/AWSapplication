@@ -38,6 +38,7 @@ Optional: terraform code contains main.tf which builds just EC2 instances.
 
 ```bash
 cd human-gov-infrastructure/terraform
+terraform init
 terraform plan         # Plan: resources to add
 terraform apply
 terraform destroy -auto-approve

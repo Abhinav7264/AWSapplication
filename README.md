@@ -535,10 +535,10 @@ User=$username
 Group=www-data
 WorkingDirectory=$project_path
 Environment="PATH=$project_path/humangovenv/bin"
-**Environment="AWS_REGION=us-east-1"
+Environment="AWS_REGION=us-east-1"
 Environment="AWS_DYNAMODB_TABLE=humangov-california-dynamodb"
 Environment="AWS_BUCKET=humangov-california-s3-ku6m"
-Environment="US_STATE=california"**
+Environment="US_STATE=california"
 ExecStart=$project_path/humangovenv/bin/gunicorn --workers 1 --bind unix:$project_path/$project_name.sock -m 007 $project_name:app
 
 [Install]

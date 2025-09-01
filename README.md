@@ -724,20 +724,7 @@ sudo systemctl status nginx
     - **humangov-california-s3-xxxx**
         - Objects
 
-<aside>
-💡
 
-## This app has a bug! 🪲
-
-### When deleting an employee, the data in the DynamoDB table is deleted, but the file in the bucket remains!
-
-### It's an intentional bug that we'll fix in the Python module!
-
-</aside>
-
-## For now, let's delete manually (just the object)! 🔥
-
-## Step 21 - Destroying Resources
 
 ```bash
 exit

@@ -53,10 +53,51 @@ This role provides **full access** to S3 and DynamoDB and is assigned to EC2 ins
 Add the following in `modules/aws_humangov_infrastructure/main.tf`:
 
 ```hcl
-resource "aws_iam_role" "s3_dynamodb_full_access_role" {...}
-resource "aws_iam_role_policy_attachment" "s3_full_access_role_policy_attachment" {...}
-resource "aws_iam_role_policy_attachment" "dynamodb_full_access_role_policy_attachment" {...}
-resource "aws_iam_instance_profile" "s3_dynamodb_full_access_instance_profile" {...}
+resource "aws_iam_role" "s3_dynamodb_full_access_role" {
+  name = "humangov-${var.state_name}-s3_dynamodb_full_access_role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+
+  tags = {
+    Name = "humangov-${var.state_name}"
+  }  
+}
+
+# Attach AmazonS3FullAccess policy to the IAM Role
+resource "aws_iam_role_policy_attachment" "s3_full_access_role_policy_attachment" {
+  role       = aws_iam_role.s3_dynamodb_full_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+}
+
+# Attach AmazonDynamoDBFullAccess policy to the IAM Role
+resource "aws_iam_role_policy_attachment" "dynamodb_full_access_role_policy_attachment" {
+  role       = aws_iam_role.s3_dynamodb_full_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
+
+# Create an IAM Instance Profile for the EC2 instance
+resource "aws_iam_instance_profile" "s3_dynamodb_full_access_instance_profile" {
+  name = "humangov-${var.state_name}-s3_dynamodb_full_access_instance_profile"
+  role = aws_iam_role.s3_dynamodb_full_access_role.name
+
+  tags = {
+    Name = "humangov-${var.state_name}"
+  }  
+}
 ```
 
 ---

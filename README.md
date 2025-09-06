@@ -737,3 +737,451 @@ terraform destroy -auto-approve
 **⛔ Stop Your IDE/EC2 Instance!**
 
 
+
+
+
+
+## Part 03 - Automated Deployment with Terraform & Ansible
+# HumanGov Automated Deployment
+
+**Terraform** and **Ansible:** *Automation from Provisioning to Configuration.*
+
+---
+
+While Terraform creates and manages the infrastructure (networks, instances, balancers),  
+Ansible steps in immediately afterwards, installing and configuring the application with precision and repeatability.
+
+This integration guarantees:
+
+- **Identical, versionable environments**
+- **Drastic reduction in manual errors**
+- **Real scalability with less effort**
+- **More time for innovation and less time solving problems**
+
+---
+
+## Step 01 - Provisioning Infrastructure with Terraform
+
+We will use Terraform's provisioners to dynamically configure Ansible's hosts file.  
+This avoids manual adjustments whenever new virtual machines are created or removed, ensuring agility and automation.
+
+📄 `modules/aws_humangov_infrastructure/main.tf`
+
+- Add the Security Group ID of your EC2/IDE
+- Configure EC2, S3, DynamoDB, and IAM resources
+- Use `local-exec` provisioners to update the Ansible hosts file dynamically
+
+**Example snippet for EC2 resource:**
+
+```hcl
+resource "aws_security_group" "state_ec2_sg" {
+    name = "humangov-${var.state_name}-ec2-sg"
+    description = "Allow traffic on ports 22 and 80"
+    
+      ingress {
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+      
+      ingress {
+        from_port   = 80
+        to_port     = 80
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+      
+      ingress {
+        from_port   = 5000
+        to_port     = 5000
+        protocol    = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    
+      ingress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        security_groups = ["<INSERT_YOUR_EC2/IDE_SECURITY_GROUP_ID>"]
+      }
+      
+      egress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["0.0.0.0/0"]
+      }
+    
+    tags = {
+        Name = "humangov-${var.state_name}"
+    }
+}
+
+resource "aws_instance" "state_ec2" {
+    ami = "ami-007855ac798b5175e"
+    instance_type = "t2.micro"
+    key_name = "humangov-ec2-key"
+    vpc_security_group_ids = [aws_security_group.state_ec2_sg.id]
+    iam_instance_profile = aws_iam_instance_profile.s3_dynamodb_full_access_instance_profile.name
+    
+    # Wait 30 seconds and add the instance's SSH key to known_hosts
+    provisioner "local-exec" {
+       command = "sleep 30; ssh-keyscan ${self.private_ip} >> ~/.ssh/known_hosts"
+    }
+
+    # Add instance info to the Ansible hosts file ( "/etc/ansible/hosts" Ansible Default Inventory Path )
+    provisioner "local-exec" {
+      command = "echo ${var.state_name} id=${self.id} ansible_host=${self.private_ip} ansible_user=ubuntu us_state=${var.state_name} aws_region=${var.region} aws_s3_bucket=${aws_s3_bucket.state_s3.bucket} aws_dynamodb_table=${aws_dynamodb_table.state_dynamodb.name} >> /etc/ansible/hosts"
+    }
+
+    # Remove instance info from the Ansible hosts file on destroy
+    provisioner "local-exec" {
+      command = "sed -i '/${self.id}/d' /etc/ansible/hosts"
+      when = destroy
+    }
+
+    
+    tags = {
+        Name = "humangov-${var.state_name}"
+    }
+}
+
+resource "aws_dynamodb_table" "state_dynamodb" {
+    name = "humangov-${var.state_name}-dynamodb"
+    billing_mode = "PAY_PER_REQUEST"
+    hash_key = "id"
+    
+    attribute {
+        name = "id"
+        type = "S"
+    }
+    
+    tags = {
+        Name = "humangov-${var.state_name}"
+    }    
+}
+
+resource "random_string" "bucket_suffix" {
+    length = 4
+    special = false
+    upper = false
+}
+
+resource "aws_s3_bucket" "state_s3" {
+    bucket = "humangov-${var.state_name}-s3-${random_string.bucket_suffix.result}"
+    
+    tags = {
+        Name = "humangov-${var.state_name}"
+    }       
+}
+
+resource "aws_iam_role" "s3_dynamodb_full_access_role" {
+  name = "humangov-${var.state_name}-s3_dynamodb_full_access_role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "ec2.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+
+  tags = {
+        Name = "humangov-${var.state_name}"
+  }  
+  
+}
+
+resource "aws_iam_role_policy_attachment" "s3_full_access_role_policy_attachment" {
+  role       = aws_iam_role.s3_dynamodb_full_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+  
+}
+
+resource "aws_iam_role_policy_attachment" "dynamodb_full_access_role_policy_attachment" {
+  role       = aws_iam_role.s3_dynamodb_full_access_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+
+}
+
+resource "aws_iam_instance_profile" "s3_dynamodb_full_access_instance_profile" {
+  name = "humangov-${var.state_name}-s3_dynamodb_full_access_instance_profile"
+  role = aws_iam_role.s3_dynamodb_full_access_role.name
+
+  tags = {
+      Name = "humangov-${var.state_name}"
+  }  
+}
+````
+````
+Host alias (e.g., california, texas...)
+
+**${var.state_name}**
+
+Used to identify and remove the host during 'terraform destroy' 'sed' searches for the instance ID and deletes the matching line
+
+**id=${self[.](http://self.id/)id}**
+
+Private IP of the EC2 instance
+
+**ansible_host=${self.private_ip}**
+
+Default username for Ubuntu EC2 instances
+
+**ansible_user=ubuntu**
+
+Variables used in templates and systemd service
+
+**us_state=${var.state_name} aws_region=${var.region} aws_s3_bucket=${aws_s3_bucket.state_s3.bucket} aws_dynamodb_table=${aws_dynamodb_table.state_dynamodb.name}**
+
+Appends the info to Ansible's default inventory file
+
+**>> /etc/ansible/hosts**
+````
+
+Adding "region" variable
+````
+📄 modules/aws_humangov_infrastructure/variables.tf
+variable "state_name" {
+    description = "The name of the US State"
+}
+
+variable "region" {
+  default = "us-east-1"
+}
+````
+---
+
+## Step 02 - Creating an Empty Inventory File
+
+```bash
+sudo mkdir -p /etc/ansible
+sudo touch /etc/ansible/hosts
+sudo chown -R ec2-user:ec2-user /etc/ansible
+sudo chown ec2-user:ec2-user /etc/ansible/hosts
+```
+
+---
+
+## Step 03 - Provisioning the Infrastructure
+
+```bash
+cd human-gov-infrastructure/terraform
+terraform plan
+terraform apply -auto-approve
+
+# Validate Ansible hosts file
+cat /etc/ansible/hosts
+```
+
+---
+
+## Step 04 - Commit Changes to Local Repository
+
+```bash
+git status
+git add .
+git commit -m "Added variable and provisioners to Terraform module aws_humangov_infrastructure/main.tf"
+```
+
+---
+
+## Step 05 - Creating an Ansible Role
+
+An Ansible role installs and configures Nginx with a Flask application running under Gunicorn.
+
+Directory structure for role `humangov_webapp`:
+
+```text
+humangov_webapp/
+├── defaults/main.yml
+├── files/
+├── handlers/main.yml
+├── tasks/main.yml
+├── templates/
+│   ├── humangov.service.j2
+│   └── nginx.conf.j2
+└── vars/main.yml
+```
+
+---
+
+## Step 06 - Ansible Configuration (`ansible.cfg`)
+
+```ini
+[defaults]
+deprecation_warnings = False
+```
+
+---
+
+## Step 07 - Test Communication with Ping Module
+
+```bash
+ansible all -m ping -e "ansible_ssh_private_key_file=/home/ec2-user/humangov-ec2-key.pem"
+```
+
+---
+
+## Step 08 - Role Variables (`defaults/main.yml`)
+
+```yaml
+---
+username: ubuntu
+project_name: humangov
+project_path: "/home/{{ username }}/{{ project_name }}"
+source_application_path: /home/ec2-user/human-gov-application/src
+```
+
+---
+
+## Step 09 - Handlers (`handlers/main.yml`)
+
+```yaml
+---
+- name: Restart Nginx
+  systemd:
+    name: nginx
+    state: restarted
+  become: yes
+
+- name: Restart humangov
+  systemd:
+    name: humangov
+    state: restarted
+  become: yes
+```
+
+---
+
+## Step 10 - Role Tasks (`tasks/main.yml`)
+
+```yaml
+- name: Configure Nginx to proxy requests
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/{{ project_name }}
+  become: yes
+
+- name: Enable Nginx configuration
+  file:
+    src: /etc/nginx/sites-available/{{ project_name }}
+    dest: /etc/nginx/sites-enabled/{{ project_name }}
+    state: link
+  notify: Restart Nginx
+  become: yes
+```
+
+---
+
+## Step 11 - Gunicorn systemd Service Template (`templates/humangov.service.j2`)
+
+```ini
+[Unit]
+Description=Gunicorn instance to serve {{ project_name }}
+After=network.target
+
+[Service]
+User={{ username }}
+Group=www-data
+WorkingDirectory={{ project_path }}
+Environment="US_STATE={{ us_state }}"
+Environment="PATH={{ project_path }}/humangovenv/bin"
+Environment="AWS_REGION={{ aws_region }}"
+Environment="AWS_DYNAMODB_TABLE={{ aws_dynamodb_table }}"
+Environment="AWS_BUCKET={{ aws_s3_bucket }}"
+ExecStart={{ project_path }}/humangovenv/bin/gunicorn --workers 1 --bind unix:{{ project_path }}/{{ project_name }}.sock -m 007 {{ project_name }}:app
+
+[Install]
+WantedBy=multi-user.target
+```
+
+---
+
+## Step 12 - Nginx Configuration Template (`templates/nginx.conf.j2`)
+
+```nginx
+server {
+    listen 80;
+    server_name humangov www.humangov;
+
+    location / {
+        include proxy_params;
+        proxy_pass http://unix:{{ project_path }}/{{ project_name }}.sock;
+    }
+}
+```
+
+---
+
+## Step 13 - Ansible Playbook (`deploy-humangov.yml`)
+
+```yaml
+- hosts: all
+  roles:
+    - humangov_webapp
+```
+
+Run the playbook:
+
+```bash
+ansible-playbook deploy-humangov.yml -e "ansible_ssh_private_key_file=/home/ec2-user/humangov-ec2-key.pem"
+```
+
+---
+
+## Step 14 - Deploying to Multiple States
+
+Update `variables.tf`:
+
+```hcl
+variable "states" {
+  description = "The list of state names"
+  default     = ["california","florida","nevada"]
+}
+```
+
+Re-run Terraform and Ansible:
+
+```bash
+terraform plan
+terraform apply -auto-approve
+ansible-playbook deploy-humangov.yml -e "ansible_ssh_private_key_file=/home/ec2-user/humangov-ec2-key.pem"
+```
+
+---
+
+## Step 15 - Destroying Resources
+
+```bash
+terraform destroy -auto-approve
+# Delete S3 bucket objects manually if "bucket not empty" error occurs
+```
+
+---
+
+## References
+
+* [Serving Flask Applications with Gunicorn and Nginx on Ubuntu](https://www.digitalocean.com/community/tutorials/how-to-serve-flask-applications-with-gunicorn-and-nginx-on-ubuntu-22-04)
+* [Installing Nginx on Ubuntu 22.04](https://www.digitalocean.com/community/tutorials/how-to-install-nginx-on-ubuntu-22-04)
+
+```
+
+---
+
+I can also make a **ready-to-download `README.md` file** for your repo with this content so you can commit it immediately.  
+
+Do you want me to do that?
+```
+
+
+

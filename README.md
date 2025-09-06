@@ -923,6 +923,7 @@ resource "aws_iam_instance_profile" "s3_dynamodb_full_access_instance_profile" {
 }
 ````
 ````
+replace security group in the code with your EC2 instance security group
 Host alias (e.g., california, texas...)
 
 **${var.state_name}**

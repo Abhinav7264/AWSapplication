@@ -154,7 +154,7 @@ resource "aws_security_group" "state_ec2_sg" {
         from_port   = 0
         to_port     = 0
         protocol    = "-1"
-        security_groups = ["<YOUR_CLOUD9_SECGROUP_ID"]
+        security_groups = ["<YOUR_VSCODE_EC2_SECGROUP_ID"]
     }
     egress {
         from_port   = 0

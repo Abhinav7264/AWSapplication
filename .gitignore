@@ -10,4 +10,5 @@ crash.log
 *.log
 *.zip
 *.tar.gz
-.DS_Store
+.DS_Store.terraform/
+*.tfstate*

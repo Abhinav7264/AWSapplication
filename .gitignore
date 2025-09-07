@@ -1,0 +1,13 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.backup
+*.bak
+
+# Local
+*.log
+*.zip
+*.tar.gz
+.DS_Store

@@ -537,7 +537,7 @@ WorkingDirectory=$project_path
 Environment="PATH=$project_path/humangovenv/bin"
 Environment="AWS_REGION=us-east-1"
 Environment="AWS_DYNAMODB_TABLE=humangov-california-dynamodb"
-Environment="AWS_BUCKET=humangov-california-s3-ku6m"
+Environment="AWS_BUCKET=humangov-california-s3-XXXX"
 Environment="US_STATE=california"
 ExecStart=$project_path/humangovenv/bin/gunicorn --workers 1 --bind unix:$project_path/$project_name.sock -m 007 $project_name:app
 
@@ -545,7 +545,7 @@ ExecStart=$project_path/humangovenv/bin/gunicorn --workers 1 --bind unix:$projec
 WantedBy=multi-user.target
 EOL
 ```
-
+Environment="AWS_BUCKET=humangov-california-s3-XXXX" replace it with your bucket name
 <aside>
 💡
 
@@ -676,6 +676,7 @@ This command activates your site's configuration in Nginx, allowing it to recogn
 </aside>
 
 ```bash
+ssh -i "humangov-ec2-key.pem" ubuntu@YOUR_PUBLIC_EC2_DNS #remote in to the resource u created using terraform
 # Listing Sites Enabled
 ls /etc/nginx/sites-enabled/
 
@@ -996,7 +997,7 @@ git commit -m "Added variable and provisioners to Terraform module aws_humangov_
 
 ---
 
-## Step 05 - Creating an Ansible Role
+## Step 05 - Creating an Ansible directory and install roles
 
 An Ansible role installs and configures Nginx with a Flask application running under Gunicorn.
 
@@ -1013,6 +1014,28 @@ humangov_webapp/
 │   └── nginx.conf.j2
 └── vars/main.yml
 ```
+
+```hcl
+cd ~/human-gov-infrastructure 
+ls
+mkdir ansible && cd ansible
+ls
+
+mkdir -p roles/humangov_webapp/tasks
+mkdir -p roles/humangov_webapp/handlers
+mkdir -p roles/humangov_webapp/templates
+mkdir -p roles/humangov_webapp/defaults
+mkdir -p roles/humangov_webapp/vars
+mkdir -p roles/humangov_webapp/files
+ls roles/
+ls roles/humangov_webapp/
+sudo dnf install tree -y
+pwd
+/home/ec2-user/human-gov-infrastructure/ansible
+touch ansible.cfg
+tree
+```
+
 
 ---
 
@@ -1067,6 +1090,96 @@ source_application_path: /home/ec2-user/human-gov-application/src
 ## Step 10 - Role Tasks (`tasks/main.yml`)
 
 ```yaml
+---
+- name: Update and upgrade apt packages
+  apt:
+    upgrade: dist
+    update_cache: yes
+  become: yes
+
+- name: Install required packages
+  apt:
+    name:
+      - nginx
+      - python3-pip
+      - python3-dev
+      - build-essential
+      - libssl-dev
+      - libffi-dev
+      - python3-setuptools
+      - python3-venv
+      - unzip
+    state: present
+  become: yes
+
+- name: Ensure UFW allows Nginx HTTP traffic
+  ufw:
+    rule: allow
+    name: 'Nginx HTTP'
+  become: yes
+
+- name: Create project directory
+  file:
+    path: "{{ project_path }}"
+    state: directory
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: '0755'
+  become: yes
+
+- name: Create Python virtual environment
+  command:
+    cmd: python3 -m venv {{ project_path }}/humangovenv
+    creates: "{{ project_path }}/humangovenv"
+
+- name: Copy the application zip file to the destination
+  copy:
+    src: "{{ source_application_path }}/humangov-app.zip"
+    dest: "{{ project_path }}"
+    owner: "{{ username }}"
+    group: "{{ username }}"
+    mode: '0644'
+  become: yes
+  
+- name: Unzip the application zip file
+  unarchive:
+    src: "{{ project_path }}/humangov-app.zip"
+    dest: "{{ project_path }}"
+    remote_src: yes
+  notify: Restart humangov
+  become: yes
+
+- name: Install Python packages from requirements.txt into the virtual environment
+  pip:
+    requirements: "{{ project_path }}/requirements.txt"
+    virtualenv: "{{ project_path }}/humangovenv"
+
+- name: Create systemd service file for Gunicorn
+  template:
+    src: humangov.service.j2
+    dest: /etc/systemd/system/{{ project_name }}.service
+  notify: Restart humangov
+  become: yes
+
+- name: Enable and start Gunicorn service
+  systemd:
+    name: "{{ project_name }}"
+    enabled: yes
+    state: started
+  become: yes
+
+- name: Remove the default nginx configuration file
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  become: yes
+
+- name: Change permissions of the user's home directory
+  file:
+    path: "/home/{{ username }}"
+    mode: '0755'
+  become: yes
+
 - name: Configure Nginx to proxy requests
   template:
     src: nginx.conf.j2
@@ -1126,6 +1239,10 @@ server {
 
 ## Step 13 - Ansible Playbook (`deploy-humangov.yml`)
 
+Go to ansible parent folder
+```
+touch deploy-humangov.yml
+```
 ```yaml
 - hosts: all
   roles:
@@ -1140,15 +1257,16 @@ ansible-playbook deploy-humangov.yml -e "ansible_ssh_private_key_file=/home/ec2-
 
 ---
 
-## Step 14 - Deploying to Multiple States
+## Step 14a - Deploying to Multiple States
 
 Update `variables.tf`:
 
 ```hcl
 variable "states" {
   description = "The list of state names"
-  default     = ["california","florida","nevada"]
+  default     = ["california","Florida","Nevada"]
 }
+##you can add as much states possible like this ["state1","state2","state3"]
 ```
 
 Re-run Terraform and Ansible:
@@ -1158,6 +1276,12 @@ terraform plan
 terraform apply -auto-approve
 ansible-playbook deploy-humangov.yml -e "ansible_ssh_private_key_file=/home/ec2-user/humangov-ec2-key.pem"
 ```
+## Step 14b - Testing the application which i created
+
+Try accessing the public dns of the ec2 instance created , you show see something like this
+<img width="1484" height="764" alt="Screenshot 2025-09-07 at 1 14 02 PM" src="https://github.com/user-attachments/assets/e9aec2a0-cebf-4c39-801e-43e4185c9449" />
+
+You can try adding some employee data as well 
 
 ---
 
@@ -1181,7 +1305,7 @@ terraform destroy -auto-approve
 
 I can also make a **ready-to-download `README.md` file** for your repo with this content so you can commit it immediately.  
 
-Do you want me to do that?
+
 ```
 
 

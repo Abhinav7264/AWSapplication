@@ -335,7 +335,7 @@ Update and upgrade 'apt' packages:
 sudo apt update
 sudo apt upgrade -y
 ```
-
+or use Yum instead of apt
 
 ## Step 05 - Installing the Necessary Packages
 
